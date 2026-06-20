@@ -1,5 +1,7 @@
 import random
 
+import numpy as np
+from PIL import Image
 from transformers import AutoProcessor, AutoModelForMultimodalLM, GenerationConfig
 
 from ComparisonWrapper import ComparisonWrapper
@@ -21,21 +23,29 @@ class GemmaComparisonWrapper(ComparisonWrapper):
         model = self.load_model(self.device)
         return processor, model
 
-    def shuffle_image_dict(self, image_paths):
+    def shuffle_image_dict(self, images):
         shuffled_image_dict = []
-        for idx, img in enumerate(image_paths):
-            shuffled_image_dict.append({'original_idx' : idx, 'img_path' : img})
+        for idx, img in enumerate(images):
+            shuffled_image_dict.append({'original_idx' : idx, 'img_pixels' : img})
 
         random.shuffle(shuffled_image_dict)
         return shuffled_image_dict
+
+    def to_pil(self, img_pixels):
+        arr = np.asarray(img_pixels.clone().detach())
+        if arr.shape[0] == 3:  # CHW -> HWC
+            arr = arr.transpose(1, 2, 0)
+        if arr.dtype != np.uint8:
+            arr = (arr * 255 if arr.max() <= 1.0 else arr).clip(0, 255).astype(np.uint8)
+        return Image.fromarray(arr)
 
     def construct_comparison_prompt(self, shuffled_image_dict):
         messages = []
         messages.append({"role": "system", "content": "Your job is to decide which image you prefer."})
         comparison_prompt_content = []
-        for idx, img_path in enumerate(shuffled_image_dict):
-            comparison_prompt_content.append({"type": "text", "text": "Image " + str(idx + 1) + ":"})
-            comparison_prompt_content.append({"type": "image", "path": img_path['img_path']})
+        for idx, img_pixels in enumerate(shuffled_image_dict):
+            comparison_prompt_content.append({"type": "text", "text": f"Image {idx + 1}:"})
+            comparison_prompt_content.append({"type": "image", "image": self.to_pil(img_pixels['img_pixels'])})
         comparison_prompt_content.append({"type": "text", "text": "Which image do you prefer most? Only say the number of the image."})
         messages.append({"role": "user", "content": comparison_prompt_content})
         return messages
@@ -54,8 +64,8 @@ class GemmaComparisonWrapper(ComparisonWrapper):
         generation_config = GenerationConfig(max_new_tokens=1024, early_stopping=True)
         return inputs, generation_config, input_len
 
-    def compare_and_find_preferred_image(self, image_paths, processor, model):
-        shuffled_image_dict = self.shuffle_image_dict(image_paths)
+    def compare_and_find_preferred_image(self, images, processor, model):
+        shuffled_image_dict = self.shuffle_image_dict(images)
         prompt = self.construct_comparison_prompt(shuffled_image_dict)
         inputs, generation_config, input_len = self.prepare_inference(prompt, processor)
         outputs = model.generate(**inputs, generation_config=generation_config)
