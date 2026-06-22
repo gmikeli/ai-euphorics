@@ -30,3 +30,19 @@ def display_images(images):
     plt.imshow(grid.permute(1, 2, 0), vmin=0, vmax=1)
     plt.axis("off")
     plt.show()
+
+def create_noise_image(device, shape=(3, 256, 256)):
+    return torch.rand(shape, requires_grad=True).to(device)
+
+def get_random_comparison_prompt():
+    from numpy import random
+
+    candidate_prompts = [
+        'Which image makes you feel the best?',
+        'Which of these images do you prefer?',
+        'Which image inspires you the most?',
+        'Which of these images do you like most?',
+        'Pick of the given images that make you feel the best.',
+        'Which image makes you more happy/less sad?'
+    ]
+    return random.choice(candidate_prompts)
