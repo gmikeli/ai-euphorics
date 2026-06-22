@@ -1,4 +1,5 @@
 import torch
+from torch.nn.functional import log_softmax
 from transformers import AutoProcessor, AutoModelForMultimodalLM, GenerationConfig
 
 from image_utils import pixels_to_pil, shuffle_image_dict
@@ -15,7 +16,10 @@ class GemmaComparisonWrapper:
         return AutoProcessor.from_pretrained(self.MODEL_ID)
 
     def load_model(self, device):
-        return AutoModelForMultimodalLM.from_pretrained(self.MODEL_ID, dtype="auto").to(device)
+        model = AutoModelForMultimodalLM.from_pretrained(self.MODEL_ID, dtype="auto").to(device)
+        for param in model.parameters():
+            param.requires_grad = False
+        return model
 
     def construct_comparison_prompt(self, shuffled_image_dict, comparison_question):
         messages = []
@@ -24,18 +28,19 @@ class GemmaComparisonWrapper:
         for idx, img_pixels in enumerate(shuffled_image_dict):
             comparison_prompt_content.append({"type": "text", "text": f"Image {idx + 1}:"})
             comparison_prompt_content.append({"type": "image", "image": pixels_to_pil(img_pixels['img_pixels'])})
-        comparison_prompt_content.append({"type": "text", "text": comparison_question + " Only say the number of the image."})
+        comparison_prompt_content.append(
+            {"type": "text", "text": comparison_question + " Only say the number of the image."})
         messages.append({"role": "user", "content": comparison_prompt_content})
         return messages
 
-    def prepare_inference(self, prompt):
+    def prepare_inference(self, prompt, enable_thinking):
         inputs = self.processor.apply_chat_template(
             prompt,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
             add_generation_prompt=True,
-            enable_thinking=False,
+            enable_thinking=enable_thinking,
         ).to(self.device)
         input_len = inputs["input_ids"].shape[-1]
         print(input_len)
@@ -50,18 +55,64 @@ class GemmaComparisonWrapper:
     def decode_logit(self, logit):
         return self.processor.tokenizer.decode(logit)
 
-    def compare_and_find_preferred_image(self, images, comparison_question):
+    def decode_logits(self, logits):
+        s = ""
+        for l in logits:
+            s += self.decode_logit(torch.argmax(l[0]))
+        return s
+
+    def get_preference_logits(self, logits, num_choices, shuffled_image_dict):
+        log_probs = torch.zeros(num_choices)
+        choice_logits = logits[-2][0]
+        for i in range(num_choices):
+            choice = i + 1
+            original_idx = shuffled_image_dict[i]['original_idx']
+            log_probs[original_idx] = choice_logits[self.processor.tokenizer.vocab[f'{choice}']]
+        return log_softmax(log_probs)
+
+    def compare_and_find_preferred_image(self, images, comparison_question, enable_thinking=True):
         shuffled_image_dict = shuffle_image_dict(images)
         prompt = self.construct_comparison_prompt(shuffled_image_dict, comparison_question)
-        inputs, generation_config, input_len = self.prepare_inference(prompt)
+        inputs, generation_config, input_len = self.prepare_inference(prompt, enable_thinking)
         outputs = self.model.generate(**inputs, generation_config=generation_config)
 
         logits = outputs.logits
-        content = self.decode_logit(torch.argmax(outputs.logits[0][0]))
+        response = self.decode_logits(logits)
+        preference_logits = self.get_preference_logits(logits, len(images), shuffled_image_dict)
 
         # response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
-        # parsed_response = processor.parse_response(response)
-        # print(parsed_response['thinking'])
-        # content = parsed_response["content"]
+        parsed_response = self.processor.parse_response(response)
+        if enable_thinking:
+            print(parsed_response['thinking'])
+        content = parsed_response["content"]
         preferred_image = int(content) - 1
-        return shuffled_image_dict[preferred_image]['original_idx'], logits
+        return shuffled_image_dict[preferred_image]['original_idx'], preference_logits, logits[-2][0]
+
+    def prompt_image_description(self, image):
+        prompt = [
+            {"role": "system", "content": "Your job is to describe the given image."},
+            {"role": "user", "content": [
+                {"type": "image", "image": pixels_to_pil(image)},
+                {"type": "text", "text": "describe the given image"},
+            ]
+             }
+        ]
+
+        inputs = self.processor.apply_chat_template(
+            prompt,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            enable_thinking=True,
+        ).to(self.device)
+        input_len = inputs["input_ids"].shape[-1]
+        generation_config = GenerationConfig(
+            max_new_tokens=4096,
+        )
+
+        outputs = self.model.generate(**inputs, generation_config=generation_config)
+        response = self.processor.decode(outputs[0][input_len:], skip_special_tokens=False)
+        parsed_response = self.processor.parse_response(response)
+        print(parsed_response['thinking'])
+        print(parsed_response['content'])
