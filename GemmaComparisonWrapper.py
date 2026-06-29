@@ -90,7 +90,7 @@ class GemmaComparisonWrapper:
         prompt = [
             {"role": "system", "content": "Your job is to describe the given image."},
             {"role": "user", "content": [
-                {"type": "image", "image": pixels_to_pil(image)},
+                {"type": "image", "image": image},
                 {"type": "text", "text": "describe the given image"},
             ]
              }
