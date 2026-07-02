@@ -61,7 +61,7 @@ class GemmaComparisonWrapper:
             choice = i + 1
             original_idx = shuffled_image_dict[i]['original_idx']
             log_probs[original_idx] = next_token_logits[self.processor.tokenizer.vocab[f'{choice}']]
-        return log_softmax(log_probs)
+        return log_probs
 
     def compare_and_find_preferred_image(self, images, comparison_question):
         shuffled_image_dict = shuffle_image_dict(images)
