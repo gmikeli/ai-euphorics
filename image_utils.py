@@ -23,6 +23,23 @@ def load_and_resize_images(folder, device, size=(256, 256)):
 
     return images
 
+def save_image(tensor, folder = "outputs", filename = "image.png"):
+    os.makedirs(folder, exist_ok=True)
+
+    t = tensor.detach().cpu()
+
+    if t.max() > 1.0:
+        t = t / 255.0
+
+    t = t.clamp(0.0, 1.0)
+    t = (t * 255).byte()
+    t = t.permute(1, 2, 0).numpy()
+
+    image = Image.fromarray(t, mode="RGB")
+    path = os.path.join(folder, filename)
+    image.save(path)
+    print(f"Saved: {path}")
+
 def display_images(images):
     if type(images) is  list:
         batch = torch.stack(images).detach().to('cpu')
