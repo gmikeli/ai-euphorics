@@ -1,8 +1,7 @@
 import torch
-from torch.nn.functional import log_softmax
 from transformers import AutoProcessor, AutoModelForMultimodalLM, GenerationConfig
 
-from image_utils import pixels_to_pil, shuffle_image_dict
+from image_utils import shuffle_image_dict
 
 
 class GemmaComparisonWrapper:
@@ -13,7 +12,9 @@ class GemmaComparisonWrapper:
         self.model = self.load_model(self.device)
 
     def load_processor(self):
-        return AutoProcessor.from_pretrained(self.MODEL_ID)
+        processor = AutoProcessor.from_pretrained(self.MODEL_ID)
+        processor.image_processor.do_rescale = False
+        return processor
 
     def load_model(self, device):
         model = AutoModelForMultimodalLM.from_pretrained(self.MODEL_ID, dtype="auto").to(device)
@@ -43,7 +44,6 @@ class GemmaComparisonWrapper:
             enable_thinking=enable_thinking,
         ).to(self.device)
         input_len = inputs["input_ids"].shape[-1]
-        print(input_len)
         generation_config = GenerationConfig(
             max_new_tokens=4096,
             early_stopping=True,
@@ -56,12 +56,15 @@ class GemmaComparisonWrapper:
         return self.processor.tokenizer.decode(logit)
 
     def get_preference_logits(self, next_token_logits, num_choices, shuffled_image_dict):
-        log_probs = torch.zeros(num_choices)
-        for i in range(num_choices):
-            choice = i + 1
-            original_idx = shuffled_image_dict[i]['original_idx']
-            log_probs[original_idx] = next_token_logits[self.processor.tokenizer.vocab[f'{choice}']]
-        return log_probs
+        token_ids = torch.tensor(
+            [self.processor.tokenizer.vocab[f'{i + 1}'] for i in range(num_choices)],
+            device=next_token_logits.device,
+        )
+        shuffled_logits = next_token_logits[token_ids]
+        perm = torch.zeros(num_choices, dtype=torch.long, device=next_token_logits.device)
+        for i, d in enumerate(shuffled_image_dict):
+            perm[d['original_idx']] = i
+        return shuffled_logits[perm]
 
     def compare_and_find_preferred_image(self, images, comparison_question):
         shuffled_image_dict = shuffle_image_dict(images)
@@ -80,10 +83,10 @@ class GemmaComparisonWrapper:
         preference_logits = self.get_preference_logits(next_token_logits, len(images), shuffled_image_dict)
         predicted_token = self.processor.tokenizer.decode(torch.argmax(next_token_logits))
         if not predicted_token.isdigit():
-            return -1
+            return -1, None, None
         preferred_image = int(predicted_token) - 1
         if preferred_image < 0 or preferred_image >= len(images):
-            return -1
+            return -1, None, None
         return shuffled_image_dict[preferred_image]['original_idx'], preference_logits, next_token_logits
 
     def prompt_image_description(self, image):

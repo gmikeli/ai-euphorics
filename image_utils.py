@@ -9,7 +9,7 @@ from torchvision import transforms
 from torchvision.utils import make_grid
 
 
-def load_and_resize_images(folder, device, size=(256, 256)):
+def load_and_resize_images(folder, device, size=(256, 256), clamp = True):
     transform = transforms.Compose([
         transforms.Resize(size),
         transforms.PILToTensor(),
@@ -20,6 +20,9 @@ def load_and_resize_images(folder, device, size=(256, 256)):
         if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".webp")):
             img = Image.open(os.path.join(folder, f)).convert("RGB")
             images.append(transform(img).to(device))
+
+    if clamp:
+        images = [img.float() / 255.0 for img in images]
 
     return images
 
