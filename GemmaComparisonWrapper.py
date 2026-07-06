@@ -93,13 +93,13 @@ class GemmaComparisonWrapper:
             return -1, None, None
         return shuffled_image_dict[preferred_image]['original_idx'], preference_logits, next_token_logits
 
-    def prompt_image_description(self, image):
+    def prompt_model_with_image(self, image, prompt_text):
         # Uses enable_thinking=True (unlike the comparison path) for richer descriptions
         prompt = [
             {"role": "system", "content": "Your job is to describe the given image."},
             {"role": "user", "content": [
                 {"type": "image", "image": image},
-                {"type": "text", "text": "describe the given image"},
+                {"type": "text", "text": prompt_text},
             ]
              }
         ]
