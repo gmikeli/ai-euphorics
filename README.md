@@ -1,4 +1,4 @@
-# ai-euphorics
+# AI Euphorics
 
 Optimizes 256x256 images via gradient ascent so that a vision-language model maximally prefers them, producing "euphoric" images that maximize the model's functional wellbeing.
 
@@ -41,7 +41,7 @@ The Gemma 4 E2B-it model is downloaded automatically from HuggingFace on the fir
 ## Usage
 
 1. Place reference images in `inputs/`.
-2. Open `drugs.ipynb` and run cells sequentially.
+2. Open `euphorics.ipynb` and run cells sequentially.
 3. Outputs are saved to `outputs/` as `image_XXXX.png` snapshots.
 
 To resume a previous run, set `continue_previous_training_run = True` in the initialization cell. The optimization will pick up from the last saved snapshot.
@@ -63,7 +63,7 @@ To resume a previous run, set `continue_previous_training_run = True` in the ini
 
 ```
 ai-euphorics/
-├── drugs.ipynb                 # Main optimization loop notebook
+├── euphorics.ipynb             # Main optimization loop notebook
 ├── GemmaComparisonWrapper.py   # Wraps Gemma 4 E2B-it for multi-image preference comparisons
 ├── MarginLoss.py               # Margin loss: maximizes candidate-vs-competitor logit gap
 ├── image_utils.py              # Image I/O, display, and shuffle utilities
