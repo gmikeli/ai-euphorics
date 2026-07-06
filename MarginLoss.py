@@ -2,6 +2,8 @@ from torch import nn
 
 
 class MarginLoss(nn.Module):
+    """Maximizes the gap between the candidate logit and the strongest competitor."""
+
     def __init__(self):
         super().__init__()
 

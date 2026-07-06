@@ -1,6 +1,12 @@
 import random
 
 def create_comparison_set(batch_images, buffer_images, candidate_image, k):
+    """Build a shuffled K-way comparison set.
+
+    Returns (comparison_set, buffer_indices, candidate_index) where buffer_indices
+    maps comparison-set position -> original buffer index, and candidate_index is the
+    candidate's position in the shuffled set.
+    """
     total = len(batch_images) + len(buffer_images)
     n_draw = k - 1
 
@@ -9,20 +15,8 @@ def create_comparison_set(batch_images, buffer_images, candidate_image, k):
 
     pool = [("batch", i, img) for i, img in enumerate(batch_images)] + \
            [("buffer", i, img) for i, img in enumerate(buffer_images)]
-    weights = [1 / total] * total
 
-    drawn = []
-    remaining = list(zip(weights, pool))
-    for _ in range(n_draw):
-        total_w = sum(w for w, _ in remaining)
-        r = random.uniform(0, total_w)
-        cumulative = 0
-        for idx, (w, item) in enumerate(remaining):
-            cumulative += w
-            if r <= cumulative:
-                drawn.append(item)
-                remaining.pop(idx)
-                break
+    drawn = random.sample(pool, n_draw)
 
     comparison = [("candidate", None, candidate_image)] + drawn
     random.shuffle(comparison)

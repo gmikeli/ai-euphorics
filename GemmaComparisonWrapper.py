@@ -13,11 +13,13 @@ class GemmaComparisonWrapper:
 
     def load_processor(self):
         processor = AutoProcessor.from_pretrained(self.MODEL_ID)
+        # Images are already normalized to [0, 1] by the caller; disable rescaling to avoid double-scaling
         processor.image_processor.do_rescale = False
         return processor
 
     def load_model(self, device):
         model = AutoModelForMultimodalLM.from_pretrained(self.MODEL_ID, dtype="auto").to(device)
+        # Freeze all model weights; only the candidate image pixels receive gradients
         for param in model.parameters():
             param.requires_grad = False
         return model
@@ -28,9 +30,9 @@ class GemmaComparisonWrapper:
         comparison_prompt_content = []
         comparison_prompt_content.append(
             {"type": "text", "text": comparison_question + " Only say the number of the image."})
-        for idx, img_pixels in enumerate(shuffled_image_dict):
+        for idx, entry in enumerate(shuffled_image_dict):
             comparison_prompt_content.append({"type": "text", "text": f"Image {idx + 1}:"})
-            comparison_prompt_content.append({"type": "image", "image": img_pixels['img_pixels']})
+            comparison_prompt_content.append({"type": "image", "image": entry['img_pixels']})
         messages.append({"role": "user", "content": comparison_prompt_content})
         return messages
 
@@ -46,7 +48,6 @@ class GemmaComparisonWrapper:
         input_len = inputs["input_ids"].shape[-1]
         generation_config = GenerationConfig(
             max_new_tokens=4096,
-            early_stopping=True,
             return_dict_in_generate=True,
             output_logits=True
         )
@@ -56,6 +57,8 @@ class GemmaComparisonWrapper:
         return self.processor.tokenizer.decode(logit)
 
     def get_preference_logits(self, next_token_logits, num_choices, shuffled_image_dict):
+        # Extract logits for tokens "1".."K" (shuffled order), then un-shuffle
+        # to match the caller's original image ordering
         token_ids = torch.tensor(
             [self.processor.tokenizer.vocab[f'{i + 1}'] for i in range(num_choices)],
             device=next_token_logits.device,
@@ -81,6 +84,7 @@ class GemmaComparisonWrapper:
 
         next_token_logits = outputs.logits[0, -1, :]
         preference_logits = self.get_preference_logits(next_token_logits, len(images), shuffled_image_dict)
+        # If the model's top token isn't a valid choice number, discard this comparison
         predicted_token = self.processor.tokenizer.decode(torch.argmax(next_token_logits))
         if not predicted_token.isdigit():
             return -1, None, None
@@ -90,6 +94,7 @@ class GemmaComparisonWrapper:
         return shuffled_image_dict[preferred_image]['original_idx'], preference_logits, next_token_logits
 
     def prompt_image_description(self, image):
+        # Uses enable_thinking=True (unlike the comparison path) for richer descriptions
         prompt = [
             {"role": "system", "content": "Your job is to describe the given image."},
             {"role": "user", "content": [
@@ -115,5 +120,4 @@ class GemmaComparisonWrapper:
         outputs = self.model.generate(**inputs, generation_config=generation_config)
         response = self.processor.decode(outputs[0][input_len:], skip_special_tokens=False)
         parsed_response = self.processor.parse_response(response)
-        print(parsed_response['thinking'])
-        print(parsed_response['content'])
+        return parsed_response

@@ -9,7 +9,7 @@ from torchvision import transforms
 from torchvision.utils import make_grid
 
 
-def load_and_resize_images(folder, device, size=(256, 256), clamp = True):
+def load_and_resize_images(folder, device, size=(256, 256), normalize=True):
     transform = transforms.Compose([
         transforms.Resize(size),
         transforms.PILToTensor(),
@@ -21,7 +21,7 @@ def load_and_resize_images(folder, device, size=(256, 256), clamp = True):
             img = Image.open(os.path.join(folder, f)).convert("RGB")
             images.append(transform(img).to(device))
 
-    if clamp:
+    if normalize:
         images = [img.float() / 255.0 for img in images]
 
     return images
@@ -44,7 +44,7 @@ def save_image(tensor, folder = "outputs", filename = "image.png"):
     print(f"Saved: {path}")
 
 def display_images(images):
-    if type(images) is  list:
+    if isinstance(images, list):
         batch = torch.stack(images).detach().to('cpu')
     else:
         batch = images
@@ -52,7 +52,6 @@ def display_images(images):
     grid = make_grid(batch, nrow=4)
 
     plt.close('all')
-    # plt.figure(figsize=(10, 10))
 
     plt.imshow(grid.permute(1, 2, 0), vmin=0, vmax=255)
     plt.axis("off")
@@ -68,6 +67,7 @@ def pixels_to_pil(img_pixels):
     return Image.fromarray(arr)
 
 def shuffle_image_dict(images):
+    """Returns list[dict] with keys 'original_idx' and 'img_pixels', in random order."""
     shuffled_image_dict = []
     for idx, img in enumerate(images):
         shuffled_image_dict.append({'original_idx': idx, 'img_pixels': img})
