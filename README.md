@@ -2,6 +2,8 @@
 
 Optimizes 256x256 images via gradient ascent so that a vision-language model maximally prefers them, producing "euphoric" images that maximize the model's functional wellbeing.
 
+<img width="2000" height="1296" alt="github banner" src="https://github.com/user-attachments/assets/b9149905-a8fd-4955-aa57-5147abd64886" />
+
 ## Overview
 
 This project implements the **image euphorics** method from Section 6.3 of [AI Wellbeing: Measuring and Improving the Functional Pleasure and Pain of AIs](https://www.ai-wellbeing.org) (Ren et al., Center for AI Safety, 2025). The paper introduces "euphorics" — optimized stimuli that maximize a model's functional wellbeing as measured by forced-choice preference comparisons. Image euphorics are optimized in continuous pixel space via gradient ascent, enabling stronger optimization pressure than text-based methods.
